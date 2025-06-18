@@ -42,6 +42,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.Tuple;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -341,8 +343,11 @@ public class ResultsJsonSerializerTest {
 				assertThat( jsonNode.get( "id" ).intValue() ).isEqualTo( 1 );
 
 				final JsonNode family = jsonNode.get( "family" );
-				assertThat( family.isObject() ).isTrue();
-				assertThat( family.get( "sister" ).get( "description" ).textValue() ).isEqualTo( "Marco's sister" );
+				assertThat( family.isArray() ).isTrue();
+				final JsonNode mapNode = getSingleValue( family );
+				assertThat( mapNode.isObject() ).isTrue();
+				assertThat( mapNode.get( "key" ).textValue() ).isEqualTo( "sister" );
+				assertThat( mapNode.get( "value" ).get( "description" ).textValue() ).isEqualTo( "Marco's sister" );
 
 				final JsonNode pets = jsonNode.get( "pets" );
 				assertThat( pets.isArray() ).isTrue();
@@ -402,7 +407,12 @@ public class ResultsJsonSerializerTest {
 			List<? extends T> values,
 			SelectionQuery<T> query,
 			SessionFactoryImplementor sessionFactory) {
-		return new ResultsJsonSerializerImpl( sessionFactory ).toString( values, query );
+		try {
+			return new ResultsJsonSerializerImpl( sessionFactory ).toString( values, query );
+		}
+		catch (IOException e) {
+			throw new UncheckedIOException( "Error during result serialization", e );
+		}
 	}
 
 	static JsonNode getSingleValue(JsonNode jsonNode) {

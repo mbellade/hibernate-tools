@@ -19,6 +19,7 @@ package org.hibernate.tool.language.internal;
 
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
 import org.hibernate.tool.language.spi.MetamodelSerializer;
+import org.hibernate.type.format.StringJsonDocumentWriter;
 
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EmbeddableType;
@@ -37,7 +38,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.hibernate.tool.language.internal.JsonHelper.JsonAppender;
 
 /**
  * Implementation of {@link MetamodelSerializer} that represents the {@link Metamodel} as a JSON array of mapped objects.
@@ -84,34 +84,35 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 		if ( map.isEmpty() ) {
 			return "{}";
 		}
-		final StringBuilder sb = new StringBuilder( "{" );
-		final JsonAppender appender = new JsonAppender( sb, false );
+
+		final StringBuilder sb = new StringBuilder();
+		final StringJsonDocumentWriter writer = new StringJsonDocumentWriter( sb, false );
+		writer.startObject();
 		for ( final var entry : map.entrySet() ) {
-			appender.append( "\"" ).append( entry.getKey() ).append( "\":" );
+			writer.objectKey( entry.getKey() );
 			final Object value = entry.getValue();
 			if ( value instanceof String strValue ) {
-				appender.append( "\"" );
-				appender.startEscaping();
-				appender.append( strValue );
-				appender.endEscaping();
-				appender.append( "\"" );
+				writer.stringValue(  strValue );
 			}
 			else if ( value instanceof Collection<?> collection ) {
-				//noinspection unchecked
-				appender.append( toJson( (Collection<String>) collection ) );
+				writer.startArray();
+				for ( Object item : collection ) {
+					writer.stringValue( item.toString() );
+				}
+				writer.endArray();
 			}
 			else if ( value instanceof Number || value instanceof Boolean ) {
-				appender.append( value.toString() );
+				writer.stringValue( value.toString(), false );
 			}
 			else if ( value == null ) {
-				appender.append( "null" );
+				writer.nullValue();
 			}
 			else {
 				throw new IllegalArgumentException( "Unsupported value type: " + value.getClass().getName() );
 			}
-			appender.append( "," );
 		}
-		return sb.deleteCharAt( sb.length() - 1 ).append( '}' ).toString();
+		writer.endObject();
+		return writer.toString();
 	}
 
 	private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
