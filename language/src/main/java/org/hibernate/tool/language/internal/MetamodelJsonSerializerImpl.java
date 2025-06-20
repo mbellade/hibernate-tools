@@ -57,9 +57,9 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 	 */
 	@Override
 	public String toString(Metamodel metamodel) {
-		final List<String> entities = new ArrayList<>();
-		final List<String> embeddables = new ArrayList<>();
-		final List<String> mappedSupers = new ArrayList<>();
+		final List<Map<String, Object>> entities = new ArrayList<>();
+		final List<Map<String, Object>> embeddables = new ArrayList<>();
+		final List<Map<String, Object>> mappedSupers = new ArrayList<>();
 		for ( ManagedType<?> managedType : metamodel.getManagedTypes() ) {
 			switch ( managedType.getPersistenceType() ) {
 				case ENTITY -> entities.add( getEntityTypeDescription( (EntityType<?>) managedType ) );
@@ -76,10 +76,6 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 		) );
 	}
 
-	private static String toJson(Collection<String> strings) {
-		return strings.isEmpty() ? "[]" : "[" + String.join( ",", strings ) + "]";
-	}
-
 	private static String toJson(Map<String, Object> map) {
 		if ( map.isEmpty() ) {
 			return "{}";
@@ -87,32 +83,38 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 
 		final StringBuilder sb = new StringBuilder();
 		final StringJsonDocumentWriter writer = new StringJsonDocumentWriter( sb, false );
-		writer.startObject();
-		for ( final var entry : map.entrySet() ) {
-			writer.objectKey( entry.getKey() );
-			final Object value = entry.getValue();
-			if ( value instanceof String strValue ) {
-				writer.stringValue(  strValue );
-			}
-			else if ( value instanceof Collection<?> collection ) {
-				writer.startArray();
-				for ( Object item : collection ) {
-					writer.stringValue( item.toString() );
-				}
-				writer.endArray();
-			}
-			else if ( value instanceof Number || value instanceof Boolean ) {
-				writer.stringValue( value.toString(), false );
-			}
-			else if ( value == null ) {
-				writer.nullValue();
-			}
-			else {
-				throw new IllegalArgumentException( "Unsupported value type: " + value.getClass().getName() );
-			}
-		}
-		writer.endObject();
+		toJson( map, writer );
 		return writer.toString();
+	}
+
+	private static void toJson(Object value, StringJsonDocumentWriter writer) {
+		if ( value instanceof String strValue ) {
+			writer.stringValue( strValue );
+		}
+		else if ( value instanceof Number || value instanceof Boolean ) {
+			writer.stringValue( value.toString(), false );
+		}
+		else if ( value instanceof Map<?, ?> map ) {
+			writer.startObject();
+			for ( final var entry : map.entrySet() ) {
+				writer.objectKey( entry.getKey().toString() );
+				toJson( entry.getValue(), writer );
+			}
+			writer.endObject();
+		}
+		else if ( value instanceof Collection<?> collection ) {
+			writer.startArray();
+			for ( final var item : collection ) {
+				toJson( item, writer );
+			}
+			writer.endArray();
+		}
+		else if ( value == null ) {
+			writer.nullValue();
+		}
+		else {
+			throw new IllegalArgumentException( "Unsupported value type: " + value.getClass().getName() );
+		}
 	}
 
 	private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
@@ -121,22 +123,22 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 		}
 	}
 
-	private static <T> String getEntityTypeDescription(EntityType<T> entityType) {
+	private static <T> Map<String, Object> getEntityTypeDescription(EntityType<T> entityType) {
 		final Map<String, Object> map = new HashMap<>( 5 );
 		map.put( "name", entityType.getName() );
 		map.put( "class", entityType.getJavaType().getTypeName() );
 		putIfNotNull( map, "superType", superTypeDescriptor( (ManagedDomainType<?>) entityType ) );
 		putIfNotNull( map, "identifierAttribute", identifierDescriptor( entityType ) );
 		map.put( "attributes", attributeArray( entityType.getAttributes() ) );
-		return toJson( map );
+		return map;
 	}
 
 	private static String superTypeDescriptor(ManagedDomainType<?> managedType) {
-		final ManagedDomainType<?> superType = managedType.getSuperType();
+		final var superType = managedType.getSuperType();
 		return superType != null ? superType.getJavaType().getTypeName() : null;
 	}
 
-	private static <T> String getMappedSuperclassTypeDescription(MappedSuperclassType<T> mappedSuperclass) {
+	private static <T> Map<String, Object> getMappedSuperclassTypeDescription(MappedSuperclassType<T> mappedSuperclass) {
 		final Class<T> javaType = mappedSuperclass.getJavaType();
 		final Map<String, Object> map = new HashMap<>( 5 );
 		map.put( "name", javaType.getSimpleName() );
@@ -144,13 +146,13 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 		putIfNotNull( map, "superType", superTypeDescriptor( (ManagedDomainType<?>) mappedSuperclass ) );
 		putIfNotNull( map, "identifierAttribute", identifierDescriptor( mappedSuperclass ) );
 		map.put( "attributes", attributeArray( mappedSuperclass.getAttributes() ) );
-		return toJson( map );
+		return map;
 	}
 
 	private static <T> String identifierDescriptor(IdentifiableType<T> identifiableType) {
 		final Type<?> idType = identifiableType.getIdType();
 		if ( idType != null ) {
-			final SingularAttribute<? super T, ?> id = identifiableType.getId( idType.getJavaType() );
+			final var id = identifiableType.getId( idType.getJavaType() );
 			return id.getName();
 		}
 		else {
@@ -158,36 +160,37 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 		}
 	}
 
-	private static <T> String getEmbeddableTypeDescription(EmbeddableType<T> embeddableType) {
+	private static <T> Map<String, Object> getEmbeddableTypeDescription(EmbeddableType<T> embeddableType) {
 		final Class<T> javaType = embeddableType.getJavaType();
 		final Map<String, Object> map = new HashMap<>( 4 );
 		map.put( "name", javaType.getSimpleName() );
 		map.put( "class", javaType.getTypeName() );
 		putIfNotNull( map, "superType", superTypeDescriptor( (ManagedDomainType<?>) embeddableType ) );
 		map.put( "attributes", attributeArray( embeddableType.getAttributes() ) );
-		return toJson( map );
+		return map;
 	}
 
-	private static <T> List<String> attributeArray(Set<Attribute<? super T, ?>> attributes) {
+	private static <T> List<Map<String, String>> attributeArray(Set<Attribute<? super T, ?>> attributes) {
 		if ( attributes.isEmpty() ) {
 			return List.of();
 		}
 
-		final ArrayList<String> result = new ArrayList<>( attributes.size() );
-		for ( final Attribute<? super T, ?> attribute : attributes ) {
-			String attributeDescription = "{\"name\":\"" + attribute.getName() +
-					"\",\"type\":\"" + attribute.getJavaType().getTypeName();
+		return attributes.stream().map( attribute -> {
+			final String name = attribute.getName();
+			String type = attribute.getJavaType().getTypeName();
 			// add key and element types for plural attributes
 			if ( attribute instanceof PluralAttribute<?, ?, ?> pluralAttribute ) {
-				attributeDescription += "<";
-				final PluralAttribute.CollectionType collectionType = pluralAttribute.getCollectionType();
+				type += "<";
+				final var collectionType = pluralAttribute.getCollectionType();
 				if ( collectionType == PluralAttribute.CollectionType.MAP ) {
-					attributeDescription +=  ( (MapAttribute<?, ?, ?>) pluralAttribute ).getKeyJavaType().getTypeName() + ",";
+					type += ( (MapAttribute<?, ?, ?>) pluralAttribute ).getKeyJavaType().getTypeName() + ",";
 				}
-				attributeDescription += pluralAttribute.getElementType().getJavaType().getTypeName() + ">";
+				type += pluralAttribute.getElementType().getJavaType().getTypeName() + ">";
 			}
-			result.add( attributeDescription + "\"}" );
-		}
-		return result;
+			return Map.of(
+					"type", type,
+					"name", name
+			);
+		} ).toList();
 	}
 }
