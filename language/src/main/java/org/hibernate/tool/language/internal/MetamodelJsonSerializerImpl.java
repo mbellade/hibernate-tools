@@ -81,8 +81,7 @@ public class MetamodelJsonSerializerImpl implements MetamodelSerializer {
 			return "{}";
 		}
 
-		final StringBuilder sb = new StringBuilder();
-		final StringJsonDocumentWriter writer = new StringJsonDocumentWriter( sb, false );
+		final StringJsonDocumentWriter writer = new StringJsonDocumentWriter( new StringBuilder() );
 		toJson( map, writer );
 		return writer.toString();
 	}

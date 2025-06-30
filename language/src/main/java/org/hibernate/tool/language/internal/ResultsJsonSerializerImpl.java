@@ -35,8 +35,8 @@ import org.hibernate.query.sqm.tree.select.SqmJpaCompoundSelection;
 import org.hibernate.query.sqm.tree.select.SqmSelectStatement;
 import org.hibernate.query.sqm.tree.select.SqmSelection;
 import org.hibernate.tool.language.spi.ResultsSerializer;
+import org.hibernate.type.descriptor.jdbc.spi.DescriptiveJsonGeneratingVisitor;
 import org.hibernate.type.format.StringJsonDocumentWriter;
-import org.hibernate.type.descriptor.jdbc.JsonHelper;
 
 import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.Selection;
@@ -49,6 +49,9 @@ import static org.hibernate.internal.util.NullnessUtil.castNonNull;
  * Utility class to serialize query results into a JSON string format.
  */
 public class ResultsJsonSerializerImpl implements ResultsSerializer {
+
+	private static final DescriptiveJsonGeneratingVisitor JSON_VISITOR = new DescriptiveJsonGeneratingVisitor();
+
 	private final SessionFactoryImplementor factory;
 
 	public ResultsJsonSerializerImpl(SessionFactoryImplementor factory) {
@@ -62,7 +65,7 @@ public class ResultsJsonSerializerImpl implements ResultsSerializer {
 		}
 
 		final StringBuilder sb = new StringBuilder();
-		final StringJsonDocumentWriter writer = new StringJsonDocumentWriter( sb, true );
+		final StringJsonDocumentWriter writer = new StringJsonDocumentWriter( sb );
 		char separator = '[';
 		for ( final T value : values ) {
 			sb.append( separator );
@@ -111,13 +114,13 @@ public class ResultsJsonSerializerImpl implements ResultsSerializer {
 			if ( selection instanceof SqmRoot<?> root ) {
 				final EntityPersister persister = factory.getMappingMetamodel()
 						.getEntityDescriptor( root.getEntityName() );
-				JsonHelper.serializeValue( persister.getEntityMappingType(), value, factory.getWrapperOptions(), writer );
+				JSON_VISITOR.visit( persister.getEntityMappingType(), value, factory.getWrapperOptions(), writer );
 			}
 			else if ( selection instanceof SqmPath<?> path ) {
 				// extract the attribute from the path
 				final ValuedModelPart subPart = getSubPart( path.getLhs(), path.getNavigablePath().getLocalName() );
 				if ( subPart != null ) {
-					JsonHelper.serializeValue( subPart.getMappedType(), value, factory.getWrapperOptions(), writer );
+					JSON_VISITOR.visit( subPart.getMappedType(), value, factory.getWrapperOptions(), writer );
 				}
 				else {
 					expressibleToString( path, value, writer );
