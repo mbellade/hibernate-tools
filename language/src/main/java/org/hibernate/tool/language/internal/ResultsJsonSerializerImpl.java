@@ -25,8 +25,8 @@ import org.hibernate.metamodel.mapping.PluralAttributeMapping;
 import org.hibernate.metamodel.mapping.ValuedModelPart;
 import org.hibernate.persister.entity.EntityPersister;
 import org.hibernate.query.SelectionQuery;
+import org.hibernate.query.spi.SqmQuery;
 import org.hibernate.query.sqm.SqmExpressible;
-import org.hibernate.query.sqm.SqmSelectionQuery;
 import org.hibernate.query.sqm.tree.SqmExpressibleAccessor;
 import org.hibernate.query.sqm.tree.SqmStatement;
 import org.hibernate.query.sqm.tree.domain.SqmPath;
@@ -69,18 +69,16 @@ public class ResultsJsonSerializerImpl implements ResultsSerializer {
 		char separator = '[';
 		for ( final T value : values ) {
 			sb.append( separator );
-			renderValue( value, (SqmSelectionQuery<? super T>) query, sb, writer );
+			//noinspection unchecked
+			renderValue( value, (SqmQuery<? super T>) query, writer );
 			separator = ',';
 		}
 		sb.append( ']' );
 		return sb.toString();
 	}
 
-	private <T> void renderValue(
-			T value,
-			SqmSelectionQuery<? super T> query,
-			StringBuilder sb,
-			StringJsonDocumentWriter writer) throws IOException {
+	private <T> void renderValue(T value, SqmQuery<? super T> query, StringJsonDocumentWriter writer)
+			throws IOException {
 		final SqmStatement<?> sqm = query.getSqmStatement();
 		if ( !( sqm instanceof SqmSelectStatement<?> sqmSelect ) ) {
 			throw new IllegalArgumentException( "Query is not a select statement." );
@@ -111,39 +109,42 @@ public class ResultsJsonSerializerImpl implements ResultsSerializer {
 	}
 
 	private void renderValue(Object value, Selection<?> selection, StringJsonDocumentWriter writer) throws IOException {
-			if ( selection instanceof SqmRoot<?> root ) {
-				final EntityPersister persister = factory.getMappingMetamodel()
-						.getEntityDescriptor( root.getEntityName() );
-				JSON_VISITOR.visit( persister.getEntityMappingType(), value, factory.getWrapperOptions(), writer );
-			}
-			else if ( selection instanceof SqmPath<?> path ) {
-				// extract the attribute from the path
-				final ValuedModelPart subPart = getSubPart( path.getLhs(), path.getNavigablePath().getLocalName() );
-				if ( subPart != null ) {
-					JSON_VISITOR.visit( subPart.getMappedType(), value, factory.getWrapperOptions(), writer );
-				}
-				else {
-					expressibleToString( path, value, writer );
-				}
-			}
-			else if ( selection instanceof SqmJpaCompoundSelection<?> compoundSelection ) {
-				final List<Selection<?>> compoundSelectionItems = compoundSelection.getCompoundSelectionItems();
-				assert compoundSelectionItems.size() > 1;
-				writer.startArray();
-				for ( int j = 0; j < compoundSelectionItems.size(); j++ ) {
-					renderValue( getValue( value, j ), compoundSelectionItems.get( j ), writer );
-				}
-				writer.endArray();
-			}
-			else if ( selection instanceof SqmExpressibleAccessor<?> node ) {
-				expressibleToString( node, value, writer );
+		if ( selection instanceof SqmRoot<?> root ) {
+			final EntityPersister persister = factory.getMappingMetamodel()
+					.getEntityDescriptor( root.getEntityName() );
+			JSON_VISITOR.visit( persister.getEntityMappingType(), value, factory.getWrapperOptions(), writer );
+		}
+		else if ( selection instanceof SqmPath<?> path ) {
+			// extract the attribute from the path
+			final ValuedModelPart subPart = getSubPart( path.getLhs(), path.getNavigablePath().getLocalName() );
+			if ( subPart != null ) {
+				JSON_VISITOR.visit( subPart.getMappedType(), value, factory.getWrapperOptions(), writer );
 			}
 			else {
-				writer.stringValue( String.valueOf( value ) );
+				expressibleToString( path, value, writer );
 			}
+		}
+		else if ( selection instanceof SqmJpaCompoundSelection<?> compoundSelection ) {
+			final List<Selection<?>> compoundSelectionItems = compoundSelection.getCompoundSelectionItems();
+			assert compoundSelectionItems.size() > 1;
+			writer.startArray();
+			for ( int j = 0; j < compoundSelectionItems.size(); j++ ) {
+				renderValue( getValue( value, j ), compoundSelectionItems.get( j ), writer );
+			}
+			writer.endArray();
+		}
+		else if ( selection instanceof SqmExpressibleAccessor<?> node ) {
+			expressibleToString( node, value, writer );
+		}
+		else {
+			writer.stringValue( String.valueOf( value ) );
+		}
 	}
 
-	private static void expressibleToString(SqmExpressibleAccessor<?> node, Object value, StringJsonDocumentWriter writer) {
+	private static void expressibleToString(
+			SqmExpressibleAccessor<?> node,
+			Object value,
+			StringJsonDocumentWriter writer) {
 		//noinspection unchecked
 		final SqmExpressible<Object> expressible = (SqmExpressible<Object>) node.getExpressible();
 		final String result = expressible != null ?

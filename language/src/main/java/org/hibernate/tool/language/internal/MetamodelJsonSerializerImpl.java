@@ -30,7 +30,6 @@ import jakarta.persistence.metamodel.MapAttribute;
 import jakarta.persistence.metamodel.MappedSuperclassType;
 import jakarta.persistence.metamodel.Metamodel;
 import jakarta.persistence.metamodel.PluralAttribute;
-import jakarta.persistence.metamodel.SingularAttribute;
 import jakarta.persistence.metamodel.Type;
 import java.util.ArrayList;
 import java.util.Collection;
